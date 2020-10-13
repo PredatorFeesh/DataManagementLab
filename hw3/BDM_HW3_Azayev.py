@@ -9,21 +9,32 @@ import csv
 # total number of companies receiving at least one complaint for that product and year
 # highest percentage (rounded to the nearest whole number) of total complaints filed against one company for that product and year.
 
-# This output summary hints at what we want as a key (product, year) and value (company)
-# We only care about numbers
-
 class CSVProtol(object):
+    # This is our final write protocol, since we need the output as CSV.
+    # It was stated in the assignment that we can ignore the head of the CSV.
     def write(self, _, value):
         ret = ''
         for word in value:
             word = str(word)
+            # We want to append the word. There is a condition where multiple products are
+            # appended together as one, so we need to put "" around it. We do so via checking
+            # for a comma already present in the word.
             ret+= (word+',') if ',' not in word else ('"'+word+'",')
-        # We have to return bytes, so we convert out utf-8 encoded str to byte array 
+        # We have to return bytes, so we convert out utf-8 encoded str to byte array
+        # We also don't take the last element of the string, as it is a comma
         return bytearray(ret[0:len(ret)-1], encoding='utf-8') # Remove last comma
 
 
 class ProcessConsumerComplaints(MRJob):
+
+    # Specify that we want the output as CSV (Via the CSV Protocol written here)
+    # We need a special protocol because of the special case that there can be multiple products considered as one product.
+    # I.E: financial services, consumer loan <= can be considered one product. But, CSV will see this as two seperate columns.
+    # We need to wrap it in quotes.
     OUTPUT_PROTOCOL = CSVProtol
+
+    SORT_VALUES = True
+    
     # First we need to process our CSV and there is no default way of doing so
     # so let's do this via entire file processing (since multilines can happen we can't rely on
     # reading a line at a time)
@@ -34,14 +45,16 @@ class ProcessConsumerComplaints(MRJob):
             for row in reader:
                 # And we yield to stay consistent with mapping when reading out file
                 # yields: (product, year), (company)
-                yield ( (row['Product'], row['Date sent to company'][0:4]), (row['Company']) )
+                yield ( (row['Product'].lower(), row['Date sent to company'][0:4]), (row['Company']) )
     
     def reducer_prodDate_numCompaniesComplaints(self, prodDate, comp):
         # (product, year)
         companies = list(comp)
         ucompanies = list(set(companies))
 
+        # By taking the total number of companies in this list, we can get our total number of complaints.
         numComplaints = len(companies)
+        # By taking the number of unique companies, we get the number of compaines complaints were against.
         uNumCompanies = len(ucompanies)
         
         # yields: (product, year), (number of complaints, number of companies)
@@ -49,14 +62,12 @@ class ProcessConsumerComplaints(MRJob):
 
     def map_pyc(self, prodDate, compData):
         # We want to combine product year company into one key
-        # Yes, this does introduce a lot of redundant data. For instance, each company in
-        # the same product year will have idential values when we reduce.
-        # However we don't care as much about how much data is being passed, as we want to
-        # focus more on the speed.
+        # This does introduce redundent data, but also allows us to get the total number of
+        # unique complaints per company.
 
-        # The plan here is to use the combiner in order to get the total number of complaints
+        # The plan here is to use the combiner in order to get the total number of complaints for company/prod/year
         # thus grouping this redundant data over N times, given we have N compltains against a 
-        # given company for the (product, year).
+        # given (company, product, year).
         listCompData = list(compData)
         for compName in listCompData[0]: # For each company
             # yields: (product, year, company), (number of compltaints, number of companies)
@@ -79,7 +90,7 @@ class ProcessConsumerComplaints(MRJob):
         percent, totalRep, totalComp = zip(*list(compData))
 
         # Because totalRep and totalComp are all the same value, we just take the first.
-        yield (None, (py[0], py[1], totalRep[0], totalComp[0], round(max(percent), 1)))
+        yield (None, (py[0], py[1], totalRep[0], totalComp[0], round(max(percent) * 100)))
 
     def steps(self):
         return [
