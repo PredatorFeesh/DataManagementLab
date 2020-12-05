@@ -72,6 +72,8 @@ def simplifyData(row):
         return (year, 5, houseNum, uStreet)
 
 # Here is our function for matching phsyical ID else return None. Then we'll filter Nones
+
+## THIS ONE MATCHES WITH LESS SEARCHING ON NEWDATA WHICH FOLLOWS NEW FORMAT.
 def matchPhysID(item):
     year = item[0]
     boro  = item[1]
@@ -114,22 +116,27 @@ def matchPhysID(item):
 
     c_data = centerlineB.value
     
-    for c_item in c_data['features']:
-        # Street in full_stree
-        # Street in street_label
-        # Borough code matches
-        if (st == c_item['properties']['full_stree'] or
-        st == c_item['properties']['st_label']) and boro == int(c_item['properties']['borocode']): 
-            # If we are here, confirms that street exists in the right boro
-            # Now check whether house is right
-            if houseOdd: # If odd house check L
-                if checkInRange(houseNum, c_item['properties']['l_low_hn'], c_item['properties']['l_high_hn']): # If num is in the range, GOOD
-                    physID = c_item['properties']['physicalid']
+    def processPhysId(street_label):
+        if street_label not in c_data['st_label']:
+            return None
+        for label_data in c_data['st_label'][street_label]:
+            if label_data['borocode'] == boro:
+                if houseOdd:
+                    if checkInRange(houseNum, label_data['l_low_hn'], label_data['l_high_hn']): # If num is in the range, GOOD
+                            return label_data['physicalid']
+                else:
+                    if checkInRange(houseNum, label_data['r_low_hn'], label_data['r_high_hn']): # If num is in range, GOOD
+                            return label_data['physicalid']
+    # In order to search, we check if we had a hit for ST
+    physID = processPhysId(st)
+    if physID is None:
+        # Now check full street
+        if st in c_data['full_stree']:
+            for street in c_data['full_stree'][st]:
+                physID = processPhysId(street) # pass street stored on full street
+                if physID is not None:
                     break
-            else: # If even check R
-                if checkInRange(houseNum, c_item['properties']['r_low_hn'], c_item['properties']['r_high_hn']): # If num is in range, GOOD
-                    physID = c_item['properties']['physicalid']
-                    break
+    
     return (physID, year, boro)
 
 
@@ -147,7 +154,7 @@ if __name__ == '__main__':
                     .option('header',True) \
                     .option('sep', ',') \
                     .option('multiLine', True) \
-                    .load('/data/share/bdm/nyc_parking_violations/*.csv')
+                    .load('hdfs:///data/share/bdm/nyc_parking_violation/*')
 
     rdd = df.rdd.map(tuple)
     
