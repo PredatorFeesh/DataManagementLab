@@ -87,17 +87,17 @@ def simplifyData(row):
 def matchPhysID(item):
     year = item[0]
     boro  = int(item[1])
-
+    
     houseNum = item[2]
     # One known case that fails, human data entry error. Ex: "99-15"
     try:
         houseOdd = int(houseNum[-1]) & 1
     except:
         return None
-
+    
     st = item[3]
     physID = None
-
+    
     # Check A is between B and C; B < A < C
     # This checks each part. Because 123-456 is valid address
     def checkInRange(a, b, c):
@@ -118,14 +118,14 @@ def matchPhysID(item):
                 ci = int(c[i])
             except:
                 return False
-
+        
             if not ( bi <= ai and ai <= ci ):
                 return False
         # Otherwise the houses matched
         return True
 
     c_data = centerlineB.value
-
+    
     def processPhysId(street_label):
         if street_label not in c_data['st_label']:
             return None
@@ -146,11 +146,14 @@ def matchPhysID(item):
                 physID = processPhysId(street) # pass street stored on full street
                 if physID is not None:
                     break
+    # If we are still none, no match
+    if physID is None:
+        return None
     #(year, 2015, 2016, 2017, 2018, 2019)
     box = [0, 0, 0, 0, 0]
     box[year-2015] = 1
     # This should make it that the year we are currently on has value 1 others 0
-    return (physID, box)
+    return (int(physID), box)
 
 # Now we want to now aggregate our form:
 # physid, 2015, 2016, 2017, 2018, 2019
@@ -160,7 +163,18 @@ def aggregListwise(a, b):
 def mapCSV(item):
     return '{}, {}, {}, {}, {}'.format(item[0], item[1][0], item[1][1], item[1][2], item[1][3])
 
+def mapJoin(item):
+    # Was empty -> ('100018', (0, None)),
+    # Had data -> ('100019', (0, (34, 0, 0, 0, 0)))
+    if item[1][0] is None and item[1][1] is None:
+        return int(item[0]), (0,0,0,0,0)
+    else:
+        return int(item[0]), item[1][1]
+
 if __name__ == '__main__':
+    # USAGE:
+    # spark-sumit <settings> --files centerline.json PIDs.txt BDM_final_local_azayev.py <output>
+    
     import json
 
     geofile, out = sys.argv[1], sys.argv[2]
@@ -168,20 +182,37 @@ if __name__ == '__main__':
     sc = SparkContext.getOrCreate()
 
     data = None
-    with open(geofile, 'r') as f:
+    with open('centerline.json', 'r') as f:
         data = json.loads(f.read())
 
     # First broadcast
     centerlineB = sc.broadcast(data)
 
+    PIDRDD = sc.textFile('PIDs.txt').flatMap(lambda x: x.split(',')).map(lambda x: (int(x), None))
+
     rdd = sc.textFile('hdfs:///data/share/bdm/nyc_parking_violation/*').map(formatCsv)
 
-    rdd \
+    rdd = rdd \
     .filter(filterInitData) \
     .map(simplifyData) \
     .filter(lambda item: item is not None and item[0] is not None and item[1] is not None and item[3] is not None) \
     .map(matchPhysID).filter(lambda x: x is not None and x[0] is not None) \
-    .reduceByKey(aggregListwise) \
-    .sortByKey() \
-    .map(mapCSV) \
-    .saveAsTextFile(out)
+    .reduceByKey(aggregListwise)
+              
+     # This is where we save our output
+    PIDRDD.fullOuterJoin(rddReduced) \
+              .sortByKey() \
+              .map(mapJoin) \
+              .map(mapCSV) \
+              .saveAsTextFile(out)
+
+    
+#     rdd \
+#     .filter(filterInitData) \
+#     .map(simplifyData) \
+#     .filter(lambda item: item is not None and item[0] is not None and item[1] is not None and item[3] is not None) \
+#     .map(matchPhysID).filter(lambda x: x is not None and x[0] is not None) \
+#     .reduceByKey(aggregListwise) \
+#     .sortByKey() \
+#     .map(mapCSV) \
+#     .saveAsTextFile(out)
