@@ -1,8 +1,18 @@
 import sys
 from pyspark import SparkContext
-from pyspark.sql import SparkSession
+
+def formatCsv(row):
+    if row is None:
+        return None
+    row = row.split(',')
+    
+    if row[0] == 'Summons Number':
+        return None
+    return row
 
 def filterInitData(row):
+    if row is None:
+        return False
     # If len is right, and not a header, and not empty, and valid year/borough
     return len(row) >= 25 and not row[0] == "Summons Number" and not (
                 (row[4] == "" or row[4] == None or row[4] == " ") or
@@ -154,13 +164,6 @@ if __name__ == '__main__':
     geofile, out = sys.argv[1], sys.argv[2]
     
     sc = SparkContext.getOrCreate()
-    spark = SparkSession.builder.getOrCreate()
-
-    df = spark.read.format('csv') \
-                    .option('header',True) \
-                    .option('sep', ',') \
-                    .option('multiLine', True) \
-                    .load('hdfs:///data/share/bdm/nyc_parking_violation/*')
 
     data = None
     with open(geofile, 'r') as f:
@@ -169,8 +172,10 @@ if __name__ == '__main__':
     # First broadcast
     centerlineB = sc.broadcast(data)
     
-    rdd = df.rdd.map(tuple) \
-    .rdd.filter(filterInitData) \
+    rdd = sc.textFile('../../DATA/Parking_Violations_Issued_-_Fiscal_Year_*.csv').map(formatCsv)
+    
+    rdd \
+    .filter(filterInitData) \
     .map(simplifyData) \
     .filter(lambda item: item is not None and item[0] is not None and item[1] is not None and item[3] is not None) \
     .map(matchPhysID).filter(lambda x: x is not None and x[0] is not None) \
