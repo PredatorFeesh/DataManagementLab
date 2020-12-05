@@ -5,7 +5,7 @@ def formatCsv(row):
     if row is None:
         return None
     row = row.split(',')
-
+    
     if row[0] == 'Summons Number':
         return None
     return row
@@ -31,7 +31,7 @@ def simplifyData(row):
     borough = row[21]
     houseNum = row[23]
     uStreet = row[24].upper()
-
+    
     # If any of the houseNum is no a digit, remove it, of it no house Number
     if houseNum == '' or houseNum == ' ' or houseNum == None:
         return None # Can't stack this into one OR, because OR checks both and errors
@@ -40,7 +40,7 @@ def simplifyData(row):
     # <number><non-numer> valid given non-number is - or otherwise removed
 #     if not all([char.isdigit() or char == '-' for char in houseNum]):
 #         return None
-
+    
     ##### NOTE IN THE DATASET FOR MATCHING, TH KILLS THE MATCH. EX: W 8TH ST, TH CAUSES NO MATCHES
     ##### ALSO, OUR CENTERLINE DATASET NEEDS TO BE STRIPPED OF SPACES BECAUSE OF EXTRA SPACES. SAME HERE.
         ### EX: E  8 ST: IS CENTERLINE. BUT HERE, IT'S: E 8TH ST. WON'T MATCH
@@ -51,11 +51,11 @@ def simplifyData(row):
         else:
             newStr += part
     uStreet = newStr
-
+    
     ### House number can also be in the form xxxx-xxxxx
     ### So we need to handle that and return as a list
     houseNum = houseNum.split('-')
-
+    
     # Convert each houseNum to int
     for i, num in enumerate(houseNum): # For each split bit
         # If empty or only 1 digit
@@ -66,9 +66,9 @@ def simplifyData(row):
             houseNum[i] = num[:-1]
         else:
             houseNum[i] = num
-
+        
 #     houseNum = [int(num) if num[-1].isdigit() else int(num[:-1]) for num in houseNum]
-
+        
     # BOROUGH RETURNED IN FORM SEEN ON BOROCODE IN CENTERLINE
     if borough in ['MAN','MH','MN','NEWY','NEW Y','NY']:
         return (year, 1, houseNum, uStreet)
@@ -87,17 +87,17 @@ def simplifyData(row):
 def matchPhysID(item):
     year = item[0]
     boro  = int(item[1])
-
+    
     houseNum = item[2]
     # One known case that fails, human data entry error. Ex: "99-15"
     try:
         houseOdd = int(houseNum[-1]) & 1
     except:
         return None
-
+    
     st = item[3]
     physID = None
-
+    
     # Check A is between B and C; B < A < C
     # This checks each part. Because 123-456 is valid address
     def checkInRange(a, b, c):
@@ -118,14 +118,14 @@ def matchPhysID(item):
                 ci = int(c[i])
             except:
                 return False
-
+        
             if not ( bi <= ai and ai <= ci ):
                 return False
         # Otherwise the houses matched
         return True
 
     c_data = centerlineB.value
-
+    
     def processPhysId(street_label):
         if street_label not in c_data['st_label']:
             return None
@@ -162,20 +162,20 @@ def mapCSV(item):
 
 if __name__ == '__main__':
     import json
-
+    
     geofile, out = sys.argv[1], sys.argv[2]
-
+    
     sc = SparkContext.getOrCreate()
 
     data = None
     with open(geofile, 'r') as f:
         data = json.loads(f.read())
-
+ 
     # First broadcast
     centerlineB = sc.broadcast(data)
-
-    rdd = sc.textFile('hdfs:///data/share/bdm/nyc_parking_violation/*').map(formatCsv)
-
+    
+    rdd = sc.textFile('../../DATA/Parking_Violations_Issued_-_Fiscal_Year_*.csv').map(formatCsv)
+    
     rdd \
     .filter(filterInitData) \
     .map(simplifyData) \
@@ -185,3 +185,6 @@ if __name__ == '__main__':
     .sortByKey() \
     .map(mapCSV) \
     .saveAsTextFile(out)
+    
+    
+    
