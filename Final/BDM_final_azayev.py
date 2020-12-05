@@ -136,10 +136,16 @@ def matchPhysID(item):
                 physID = processPhysId(street) # pass street stored on full street
                 if physID is not None:
                     break
-    
-    return (physID, year, boro)
+    #(year, 2015, 2016, 2017, 2018, 2019)
+    box = [0, 0, 0, 0, 0]
+    box[year-2015] = 1
+    # This should make it that the year we are currently on has value 1 others 0
+    return (physID, box)
 
-
+# Now we want to now aggregate our form:
+# physid, 2015, 2016, 2017, 2018, 2019
+def aggregListwise(a, b):
+    return (a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3], a[4] + b[4])
 
 
 if __name__ == '__main__':
@@ -156,10 +162,6 @@ if __name__ == '__main__':
                     .option('multiLine', True) \
                     .load('hdfs:///data/share/bdm/nyc_parking_violation/*')
 
-    rdd = df.rdd.map(tuple)
-    
-    rdd = rdd.filter(filterInitData).map(simplifyData).filter(lambda item: item is not None and item[0] is not None and item[1] is not None and item[3] is not None)
-   
     data = None
     with open(geofile, 'r') as f:
         data = json.loads(f.read())
@@ -167,7 +169,13 @@ if __name__ == '__main__':
     # First broadcast
     centerlineB = sc.broadcast(data)
     
-    rdd.map(matchPhysID).filter(lambda x: x is not None and x[0] is not None).saveAsTextFile(out)
+    rdd = df.rdd.map(tuple) \
+    .rdd.filter(filterInitData) \
+    .map(simplifyData) \
+    .filter(lambda item: item is not None and item[0] is not None and item[1] is not None and item[3] is not None) \
+    .map(matchPhysID).filter(lambda x: x is not None and x[0] is not None) \
+    .reduceByKey(aggregListwise) \
+    .saveAsTextFile(out)
     
     
     
