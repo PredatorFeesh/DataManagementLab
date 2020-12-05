@@ -76,7 +76,7 @@ def simplifyData(row):
 ## THIS ONE MATCHES WITH LESS SEARCHING ON NEWDATA WHICH FOLLOWS NEW FORMAT.
 def matchPhysID(item):
     year = item[0]
-    boro  = item[1]
+    boro  = int(item[1])
     
     houseNum = item[2]
     # One known case that fails, human data entry error. Ex: "99-15"
@@ -120,7 +120,7 @@ def matchPhysID(item):
         if street_label not in c_data['st_label']:
             return None
         for label_data in c_data['st_label'][street_label]:
-            if label_data['borocode'] == boro:
+            if int(label_data['borocode']) == boro:
                 if houseOdd:
                     if checkInRange(houseNum, label_data['l_low_hn'], label_data['l_high_hn']): # If num is in the range, GOOD
                             return label_data['physicalid']
@@ -167,7 +167,7 @@ if __name__ == '__main__':
     # First broadcast
     centerlineB = sc.broadcast(data)
     
-    rdd.map(matchPhysID).filter(lambda x: x is not None and x[0] is not None).saveAsTextFile(output)
+    rdd.map(matchPhysID).filter(lambda x: x is not None and x[0] is not None).saveAsTextFile(out)
     
     
     
