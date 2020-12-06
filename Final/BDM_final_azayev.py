@@ -194,7 +194,7 @@ def mapCSV(item):
 
 if __name__ == '__main__':
     # USAGE:
-    # spark-sumit <settings> --files centerline.json PIDs.txt BDM_final_local_azayev.py <output>
+    # spark-sumit <settings> --files centerline.json,PIDs.txt BDM_final_local_azayev.py <output>
 
     import json
 
