@@ -161,14 +161,36 @@ def matchPhysID(item):
 def aggregListwise(a, b):
     return (a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3], a[4] + b[4])
 
+# This should happen before our outer join, so we don't waste time on the 0s
+def mapOLS(item):
+    # Too small to take cost of broadcast 
+    x = [2015.0, 2016.0, 2017.0, 2018.0, 2019.0]
+    y = [float(i) for i in item[1]]
+    pID = item[0]
+    # Our mean
+    xmean = sum(x)/5.0
+    ymean = sum(y)/5.0
+    # now we find (x-xmean)^2 (denom) and our (x-xmean)(y-ymean) (numerator)
+    denom = 0.0
+    num = 0.0
+    xsub = 0.0
+    for i in range(5):
+        xsub = x[i] - xmean
+        denom += xsub**2
+        num += xsub * (y[i] - ymean)
+    final = num / denom
+    # now we return the final, merge it onto the years
+    return (pID, (item[1][0],item[1][1],item[1][2],item[1][3],item[1][4], final) )
+
 def mapCSV(item):
     # Was empty -> ('100018', (0, None)),
     # Had data -> ('100019', (0, (34, 0, 0, 0, 0)))
+    toOut = []
     if item[1][0] is None and item[1][1] is None:
-        return int(item[0]), (0,0,0,0,0)
+        toOut = (int(item[0]), (0,0,0,0,0,0))
     else:
-        return int(item[0]), item[1][1]
-    return '{}, {}, {}, {}, {}'.format(item[0], item[1][0], item[1][1], item[1][2], item[1][3])
+        toOut = (int(item[0]), item[1][1])
+    return '{}, {}, {}, {}, {}, {}, {}'.format(toOut[0], toOut[1][0], toOut[1][1], toOut[1][2], toOut[1][3], toOut[1][4], toOut[1][5])
 
 if __name__ == '__main__':
     # USAGE:
@@ -195,13 +217,13 @@ if __name__ == '__main__':
     .map(simplifyData) \
     .filter(lambda item: item is not None and item[0] is not None and item[1] is not None and item[3] is not None) \
     .map(matchPhysID).filter(lambda x: x is not None and x[0] is not None) \
-    .reduceByKey(aggregListwise)
+    .reduceByKey(aggregListwise) \
+    .map(mapOLS)
               
-    PIDRDD.fullOuterJoin(rddReduced) \
-              .sortByKey() \
-              .map(mapJoin) \
-              .map(mapCSV) \
-              .saveAsTextFile(out)
+    PIDRDD.fullOuterJoin(rdd) \
+    .sortByKey() \
+    .map(mapCSV) \
+    .saveAsTextFile(out)
 
     
     

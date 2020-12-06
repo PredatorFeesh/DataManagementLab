@@ -87,17 +87,17 @@ def simplifyData(row):
 def matchPhysID(item):
     year = item[0]
     boro  = int(item[1])
-    
+
     houseNum = item[2]
     # One known case that fails, human data entry error. Ex: "99-15"
     try:
         houseOdd = int(houseNum[-1]) & 1
     except:
         return None
-    
+
     st = item[3]
     physID = None
-    
+
     # Check A is between B and C; B < A < C
     # This checks each part. Because 123-456 is valid address
     def checkInRange(a, b, c):
@@ -118,14 +118,14 @@ def matchPhysID(item):
                 ci = int(c[i])
             except:
                 return False
-        
+
             if not ( bi <= ai and ai <= ci ):
                 return False
         # Otherwise the houses matched
         return True
 
     c_data = centerlineB.value
-    
+
     def processPhysId(street_label):
         if street_label not in c_data['st_label']:
             return None
@@ -160,24 +160,45 @@ def matchPhysID(item):
 def aggregListwise(a, b):
     return (a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3], a[4] + b[4])
 
-def mapCSV(item):
-    return '{}, {}, {}, {}, {}'.format(item[0], item[1][0], item[1][1], item[1][2], item[1][3])
+# This should happen before our outer join, so we don't waste time on the 0s
+def mapOLS(item):
+    # Too small to take cost of broadcast
+    x = [2015.0, 2016.0, 2017.0, 2018.0, 2019.0]
+    y = [float(i) for i in item[1]]
+    pID = item[0]
+    # Our mean
+    xmean = sum(x)/5.0
+    ymean = sum(y)/5.0
+    # now we find (x-xmean)^2 (denom) and our (x-xmean)(y-ymean) (numerator)
+    denom = 0.0
+    num = 0.0
+    xsub = 0.0
+    for i in range(5):
+        xsub = x[i] - xmean
+        denom += xsub**2
+        num += xsub * (y[i] - ymean)
+    final = num / denom
+    # now we return the final, merge it onto the years
+    return (pID, (item[1][0],item[1][1],item[1][2],item[1][3],item[1][4], final) )
 
-def mapJoin(item):
+def mapCSV(item):
     # Was empty -> ('100018', (0, None)),
     # Had data -> ('100019', (0, (34, 0, 0, 0, 0)))
+    toOut = []
     if item[1][0] is None and item[1][1] is None:
-        return int(item[0]), (0,0,0,0,0)
+        toOut = (int(item[0]), (0,0,0,0,0,0))
     else:
-        return int(item[0]), item[1][1]
+        toOut = (int(item[0]), item[1][1])
+    return '{}, {}, {}, {}, {}, {}, {}'.format(toOut[0], toOut[1][0], toOut[1][1], toOut[1][2], toOut[1][3], toOut[1][4], toOut[1][5])
+
 
 if __name__ == '__main__':
     # USAGE:
     # spark-sumit <settings> --files centerline.json PIDs.txt BDM_final_local_azayev.py <output>
-    
+
     import json
 
-    geofile, out = sys.argv[1], sys.argv[2]
+    out = sys.argv[1]
 
     sc = SparkContext.getOrCreate()
 
@@ -188,7 +209,9 @@ if __name__ == '__main__':
     # First broadcast
     centerlineB = sc.broadcast(data)
 
-    PIDRDD = sc.textFile('PIDs.txt').flatMap(lambda x: x.split(',')).map(lambda x: (int(x), None))
+    PIDRDD = None
+    with open('PIDs.txt') as f:
+        PIDRDD = sc.parallelize(f.read().split(',')).flatMap(lambda x: x.split(',')).map(lambda x: (int(x), None))
 
     rdd = sc.textFile('hdfs:///data/share/bdm/nyc_parking_violation/*').map(formatCsv)
 
@@ -197,22 +220,10 @@ if __name__ == '__main__':
     .map(simplifyData) \
     .filter(lambda item: item is not None and item[0] is not None and item[1] is not None and item[3] is not None) \
     .map(matchPhysID).filter(lambda x: x is not None and x[0] is not None) \
-    .reduceByKey(aggregListwise)
-              
-     # This is where we save our output
-    PIDRDD.fullOuterJoin(rddReduced) \
-              .sortByKey() \
-              .map(mapJoin) \
-              .map(mapCSV) \
-              .saveAsTextFile(out)
+    .reduceByKey(aggregListwise) \
+    .map(mapOLS)
 
-    
-#     rdd \
-#     .filter(filterInitData) \
-#     .map(simplifyData) \
-#     .filter(lambda item: item is not None and item[0] is not None and item[1] is not None and item[3] is not None) \
-#     .map(matchPhysID).filter(lambda x: x is not None and x[0] is not None) \
-#     .reduceByKey(aggregListwise) \
-#     .sortByKey() \
-#     .map(mapCSV) \
-#     .saveAsTextFile(out)
+    PIDRDD.fullOuterJoin(rdd) \
+    .sortByKey() \
+    .map(mapCSV) \
+    .saveAsTextFile(out)
