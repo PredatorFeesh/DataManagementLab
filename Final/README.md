@@ -1,5 +1,23 @@
 # Final Project Report
 
+# TLDR;
+
+Total execution time: 7m, 11s
+
+Total number of records matched: 29,305,147
+
+------------------------------------------------
+
+Matched physical IDs to total violations for the years 2015, 2016, 2017, 2018, 2019: Done ✔️
+
+All physical IDs present in output: Done ✔️
+
+Output sorted by Physical ID: Done ✔️
+
+------------------------------------------------
+
+Extra Credit (Bonus): Done ✔️
+
 # Running the code:
 
 ## Files
