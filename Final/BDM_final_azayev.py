@@ -11,6 +11,7 @@ def formatCsv(row):
     return row
 
 def filterInitData(row):
+    # Note that this step is likey just extra processing. However, this can cut down the total number of points we have to process in the next step if we are able to filter out early.
     if row is None:
         return False
     # If len is right, and not a header, and not empty, and valid year/borough
@@ -26,7 +27,7 @@ def filterInitData(row):
             )
 
 def simplifyData(row):
-#     return row
+    # Now, we want to simplify our data into the form: (year, borough, house number, street). These should be in a special form though. Borocode has to be a number, annd our street has to be parsed in the method mentioned in the README (also commented here).
     year = int(row[4][-4:])
     borough = row[21]
     houseNum = row[23]
@@ -85,8 +86,9 @@ def simplifyData(row):
 
 ## THIS ONE MATCHES WITH LESS SEARCHING ON NEWDATA WHICH FOLLOWS NEW FORMAT.
 def matchPhysID(item):
+    # The way this matches our physical ID is discussed in the README, and also commented on here.
     year = item[0]
-    boro  = int(item[1])
+    boro  = int(item[1]) # Ensure types are the same here
 
     houseNum = item[2]
     # One known case that fails, human data entry error. Ex: "99-15"
@@ -109,27 +111,33 @@ def matchPhysID(item):
             return False
         ai, bi, ci = 0, 0, 0
 
+	# Now look through each part and compare whether it is in the range we are looking for.
         for i in range(la):
             # If a part doesn't match, not even
             # If we can't handle, skip
             try:
+		# Verify here that the street address can actually be parsed. As in, whether each part of it can be converted into a string for verification.
                 ai = int(a[i])
                 bi = int(b[i])
                 ci = int(c[i])
             except:
                 return False
-
+            # And here, we verify the range given that our try didn't fail
             if not ( bi <= ai and ai <= ci ):
                 return False
         # Otherwise the houses matched
         return True
-
+    
+    # Get our broadcasted variable
     c_data = centerlineB.value
 
+    # This fnuction checks the STREET against the actual dataset, whether our dataset has a match. If it does, we return the physical ID.
     def processPhysId(street_label):
         if street_label not in c_data['st_label']:
+	    # If we are not able to actually find the street in our data, return None.
             return None
         for label_data in c_data['st_label'][street_label]:
+	    # Otherwise, we go through each piece of data in our street labels for the match and check if any of them match. We return the first match.
             if int(label_data['borocode']) == boro:
                 if houseOdd:
                     if checkInRange(houseNum, label_data['l_low_hn'], label_data['l_high_hn']): # If num is in the range, GOOD
@@ -140,7 +148,7 @@ def matchPhysID(item):
     # In order to search, we check if we had a hit for ST
     physID = processPhysId(st)
     if physID is None:
-        # Now check full street
+        # Now check full street, if we were not able to match our regular street. This is because a HIT is considered by the STREET LABEL OR FULL STREET
         if st in c_data['full_stree']:
             for street in c_data['full_stree'][st]:
                 physID = processPhysId(street) # pass street stored on full street
@@ -149,7 +157,8 @@ def matchPhysID(item):
     # If we are still none, no match
     if physID is None:
         return None
-    #(year, 2015, 2016, 2017, 2018, 2019)
+    
+    # This is our "year" data. As in, box = [2015, 2016, 2017, 2018, 2019] violations. We can match the current year by subtracting the minimum (which is 2015) and saying that's 1. Then we sum in the reducer.
     box = [0, 0, 0, 0, 0]
     box[year-2015] = 1
     # This should make it that the year we are currently on has value 1 others 0
@@ -158,6 +167,7 @@ def matchPhysID(item):
 # Now we want to now aggregate our form:
 # physid, 2015, 2016, 2017, 2018, 2019
 def aggregListwise(a, b):
+    # This sums up the number of violations for each year
     return (a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3], a[4] + b[4])
 
 # This should happen before our outer join, so we don't waste time on the 0s
@@ -173,6 +183,7 @@ def mapOLS(item):
     denom = 0.0
     num = 0.0
     xsub = 0.0
+    # Our Numberation and Denominator are sums of each bit, shown here
     for i in range(5):
         xsub = x[i] - xmean
         denom += xsub**2
@@ -186,15 +197,23 @@ def mapCSV(item):
     # Had data -> ('100019', (0, (34, 0, 0, 0, 0)))
     toOut = []
     if item[1][0] is None and item[1][1] is None:
+	# If we had no match before, we return 0 for all the data
         toOut = (int(item[0]), (0,0,0,0,0,0))
     else:
+	# Otherwise, if we had a match before, show that match
         toOut = (int(item[0]), item[1][1])
+    # And format our data in the CSV Output form
     return '{}, {}, {}, {}, {}, {}, {}'.format(toOut[0], toOut[1][0], toOut[1][1], toOut[1][2], toOut[1][3], toOut[1][4], toOut[1][5])
 
 
 if __name__ == '__main__':
     # USAGE:
     # spark-sumit <settings> --files centerline.json,PIDs.txt BDM_final_local_azayev.py <output>
+
+    # THE ABOVE CODE IS DOCUMENTED
+    # ADDITIONAL DOCUMENTATION (ESPECIALLY OF THE ORDER) CAN BE FOUND IN THE README.md
+
+    # RUNTIME, SUCCESSFUL RUN ID, CAN ALL BE FOUND IN THE README.md AS WELL.
 
     import json
 

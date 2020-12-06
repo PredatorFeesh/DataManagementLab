@@ -108,15 +108,29 @@ In order to remove case sensitivity, all non-numerical letters are capitalized. 
 This is just the PIDs extracted and sorted as a list. I then do a full outer join on this in order to make sure all PIDs are in the final dataset.
 
 
-## Matching the streets
+## Matching the streets - Inconsistencies and Violations Data
 
 There were a few things with the data that prevented matchings:
-- Multiple spaces in the centerline data (view the centerline fragment to see solution for that in the dataset)
+- Multiple spaces in the centerline data (view the centerline fragment to see solution for that in the dataset) [Fixed by stripping whitespace in both dataasets]
 - Inconsistencies in the names between datasets. For example, `7TH AVE` in the violations dataset, but `7 AVE` in the centerline dataset. The largest categories included `TH`, `ST`, and `ND` endings.
 - Addresses with numbers at the end. Example: `35A`. The `A` in this case could be completely disregarded, as that can be seen as a 'sub address' or house number' rather than a 'house address'.
 - Many names for the same street. For example, violations dataset looked for `BEACH AVE` whereas in the centerline it was either `BAVE` or `BCHAVE`.
 - Human data entry error - For example, when given a home address `91 29`, it should have been `92-29`. This is an extremely broad category and was discarded, as there are too many possible error types that might not happen often enough to really care about.
 
+There are also centerline-specific issues covered as well which we also need to adjust here recapped which are:
+- Case Sensitivity
+- Disparity in spacing
+
+And after we are done with our filtering, we capitalize our street name and remove the spaces, similar as in the dataset so we can start matching up our streets.
+
+
+## Order of operations
+
+First, I make an RDD with the data read from all the CSVs of violation data. I then filter this data (removing empty streets, addresses, borocode, etc..), match the data with the centerline dataset (through the method mentioned above - searching a dictionary for a key is `O(1)`), find the OLS for each physical ID, and then sort by ID.
+
+I then do a full other join with the PIDs RDD, which contains the values in the form (<PHYSICAL_ID>, None). The full outer join is done on the Physical IDs. This returns a dataset with our (<PHYSICAL_ID, (None, <Data if it exit from before with the number of violations per year data + OLS Coef>)). If we don't have data from the previous (meaning both are None), that means that that data didn't exist before and thus we return 0s in it's stead. This ensures that we have all the physical IDs.
+
+Finally, we map this into it's CSV form defined by the Output section in our assignement.
 
 
 
