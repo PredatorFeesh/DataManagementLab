@@ -24,6 +24,10 @@ Extra Credit (Bonus): Done ✔️
 
 You will need to have the `centerline.json` and `PIDs.txt` files in the same directory as the pyspark script, `BDM_final_azayev.py`. These will be passed in as files in the command to run.
 
+The `final_out.csv` file has the output CSV generated from the script.
+
+`azayev_final.ipynb` is my scratch pad, and includes tests and the scripts to generate the centerline and PID files. The cells that do so are commented in the notebook.
+
 ## Command to run
 
 ** Note that this is written for Python 3
@@ -32,7 +36,7 @@ You will need to have the `centerline.json` and `PIDs.txt` files in the same dir
 spark-submit --num-executors 6 --executor-cores 5 --executor-memory 10G --files centerline.json,PIDs.txt BDM_final_azayev.py azayev_final_output
 ```
 
-Note: `azayev_final_output` is where the output goes.
+Note: `azayev_final_output` is where the output goes on HDFS. Use `hadoop fs -getmerge azayev_final_output azayev_output.csv` to get the final output.
 
 # What has been done
 
@@ -43,7 +47,7 @@ I have found the OLS Coefficient (Slope) (BONUS) for each street segment of the 
 The latest successful run has the following statistics:
 
 - Run time: 6m, 59s
-- Application ID: application_1594661542558_2805
+- Application ID: application_1594661542558_2861 
 - User: jazayev000 (my user)
 - Output folder in HDFS on my user: test5 AND test_after_comments [my final submitted test] (note, multiple different trials of my code have test<test num>, 5th is latest successful). **Note: The only changes I made to the submitted final file is added comments**.
 
